@@ -11,7 +11,6 @@ import {
   SafeAreaView
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { generateMentorResponse } from '../services/geminiService';
 
 export default function ChatScreen({ route, navigation }: any) {
   const scrollViewRef = useRef<ScrollView>(null);
@@ -19,7 +18,9 @@ export default function ChatScreen({ route, navigation }: any) {
   const [messages, setMessages] = useState<{ role: 'user' | 'mentor'; text: string }[]>([
     {
       role: 'mentor',
-      text: `Hello. I see you're feeling ${route.params?.mood || 'a bit overwhelmed'}. I'm here for you. What's on your mind?`
+      text: `Hello. I see you're feeling ${
+        route.params?.mood || 'a bit overwhelmed'
+      }. I'm here for you. What's on your mind?`
     }
   ]);
 
@@ -32,43 +33,55 @@ export default function ChatScreen({ route, navigation }: any) {
     }, 100);
   };
 
-  const sendMessage = async () => {
-    if (!inputText.trim() || loading) return;
+  // ✅ FIXED: direct backend call (NO geminiService anymore)
+const sendMessage = async () => {
+  if (!inputText.trim() || loading) return;
 
-    const userText = inputText.trim();
+  const userText = inputText.trim();
 
-    // Add user message
-    setMessages(prev => [...prev, { role: 'user', text: userText }]);
-    setInputText('');
-    setLoading(true);
+  setMessages(prev => [...prev, { role: 'user', text: userText }]);
+  setInputText('');
+  setLoading(true);
 
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.EXPO_PUBLIC_GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [{ text: userText }]
+            }
+          ]
+        })
+      }
+    );
+
+    const data = await response.json();
+
+    const reply =
+      data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+      "No response from AI";
+
+    setMessages(prev => [
+      ...prev,
+      { role: 'mentor', text: reply }
+    ]);
+
+  } catch (error) {
+    setMessages(prev => [
+      ...prev,
+      { role: 'mentor', text: "Error connecting to AI 💛" }
+    ]);
+  } finally {
+    setLoading(false);
     scrollToBottom();
-
-    try {
-      const response = await generateMentorResponse(userText);
-
-      setMessages(prev => [
-        ...prev,
-        {
-          role: 'mentor',
-          text: response?.trim()
-            ? response
-            : "I'm here with you. Try sharing a bit more, I'll listen 💛"
-        }
-      ]);
-    } catch (error) {
-      setMessages(prev => [
-        ...prev,
-        {
-          role: 'mentor',
-          text: "Hey, something went wrong. Try again in a moment 💛"
-        }
-      ]);
-    } finally {
-      setLoading(false);
-      scrollToBottom();
-    }
-  };
+  }
+};
 
   return (
     <SafeAreaView style={styles.container}>
